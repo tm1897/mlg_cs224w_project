@@ -6,7 +6,7 @@ import torch_scatter
 from torch_geometric.nn.conv import MessagePassing
 
 class LightGCNStack(torch.nn.Module):
-    def __init__(self, latent_dim, args):
+    def __init__(self, latent_dim, dataset, args):
         super(LightGCNStack, self).__init__()
         conv_model = LightGCN
         self.convs = nn.ModuleList()
@@ -15,8 +15,12 @@ class LightGCNStack(torch.nn.Module):
         for l in range(args.num_layers-1):
             self.convs.append(conv_model(latent_dim))
 
-        self.dropout = args.dropout
         self.num_layers = args.num_layers
+        self.dataset = dataset
+        self.embedding_user = torch.nn.Embedding(
+            num_embeddings= dataset.num_users, embedding_dim=self.latent_dim)
+        self.embedding_item = torch.nn.Embedding(
+            num_embeddings= dataset.num_items, embedding_dim=self.latent_dim)
 
     def forward(self, data):
         x, edge_index, batch = data.x, data.edge_index, data.batch
@@ -35,12 +39,6 @@ class LightGCN(MessagePassing):
         super(LightGCN, self).__init__(node_dim=0, **kwargs)
         self.latent_dim = latent_dim
 
-    def reset_parameters(self):
-        nn.init.xavier_uniform_(self.lin_l.weight)
-        nn.init.xavier_uniform_(self.lin_r.weight)
-        nn.init.xavier_uniform_(self.att_l)
-        nn.init.xavier_uniform_(self.att_r)
-
     def forward(self, x, edge_index, size=None):
         return self.propagate(edge_index=edge_index, x=(x,x), size=size)
 
@@ -50,6 +48,3 @@ class LightGCN(MessagePassing):
     def aggregate(self, inputs, index, dim_size=None):
         return torch_scatter.scatter(src=inputs, index=index, dim=0, dim_size=dim_size, reduce='mean')
 
-    
-if __name__ == '__main__':
-    print("Ok")
