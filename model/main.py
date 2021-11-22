@@ -1,0 +1,34 @@
+import get_pyg_data
+from model import LightGCNStack
+import torch
+from train_test import train, test
+from torch_geometric.utils import train_test_split_edges
+
+
+class objectview(object):
+    def __init__(self, *args, **kwargs):
+        d = dict(*args, **kwargs)
+        self.__dict__ = d
+
+if __name__=='__main__':
+    best_val_perf = test_perf = 0
+    data = get_pyg_data.load_feather()
+    data = train_test_split_edges(data)
+
+    for args in [
+        {'model_type': 'GraphSage', 'dataset': 'cora', 'num_layers': 2, 'heads': 1, 'batch_size': 32, 'hidden_dim': 32,
+         'dropout': 0.5, 'epochs': 500, 'opt': 'adam', 'opt_scheduler': 'none', 'opt_restart': 0, 'weight_decay': 5e-3,
+         'lr': 0.01},
+    ]:
+        args = objectview(args)
+        model, data = LightGCNStack(latent_dim=64, dataset=data, args=args).to('cuda'), data.to('cuda')
+        optimizer = torch.optim.Adam(params=model.parameters(), lr=0.001)
+        for epoch in range(1, 1001):
+            train_loss = train(model, data, optimizer)
+            val_perf, tmp_test_perf = test(model, data)
+            if val_perf > best_val_perf:
+                best_val_perf = val_perf
+                test_perf = tmp_test_perf
+            log = 'Epoch: {:03d}, Loss: {:.4f}, Val: {:.4f}, Test: {:.4f}'
+            if epoch % 100 == 0:
+                print(log.format(epoch, train_loss, best_val_perf, test_perf))

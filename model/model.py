@@ -15,23 +15,36 @@ class LightGCNStack(torch.nn.Module):
         for l in range(args.num_layers-1):
             self.convs.append(conv_model(latent_dim))
 
+        self.latent_dim = latent_dim
         self.num_layers = args.num_layers
         self.dataset = dataset
-        self.embedding_user = torch.nn.Embedding(
-            num_embeddings= dataset.num_users, embedding_dim=self.latent_dim)
-        self.embedding_item = torch.nn.Embedding(
-            num_embeddings= dataset.num_items, embedding_dim=self.latent_dim)
+        self.embeddings = torch.nn.Embedding(
+            num_embeddings= dataset.num_nodes, embedding_dim=self.latent_dim)
+        print('ok')
 
-    def forward(self, data):
-        x, edge_index, batch = data.x, data.edge_index, data.batch
+    def reset_parameters(self):
+        self.embeddings.reset_parameters()
 
+    def forward(self):
+        x, edge_index, batch = self.embeddings.weight, self.dataset.train_pos_edge_index, self.dataset.batch
+
+        final_embeddings = torch.zeros(size=x.size(), device='cuda')
+        final_embeddings = final_embeddings + x/(self.num_layers+1)
         for i in range(self.num_layers):
             x = self.convs[i](x, edge_index)
+            final_embeddings = final_embeddings + x/(self.num_layers+1)
 
-        return x
+        return final_embeddings
 
-    def loss(self, pred, label):
-        return F.nll_loss(pred, label)
+    def decode(self, z, pos_edge_index, neg_edge_index):  # only pos and neg edges
+        edge_index = torch.cat([pos_edge_index, neg_edge_index], dim=-1)  # concatenate pos and neg edges
+        logits = (z[edge_index[0]] * z[edge_index[1]]).sum(dim=-1)  # dot product
+        return logits
+
+    def decode_all(self, z):
+        prob_adj = z @ z.t()  # get adj NxN
+        #return (prob_adj > 0).nonzero(as_tuple=False).t()  # get predicted edge_list
+        return prob_adj
 
 
 class LightGCN(MessagePassing):

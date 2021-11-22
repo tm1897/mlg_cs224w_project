@@ -1,0 +1,4 @@
+- Custom negative sampling technique for bipartite graph
+- Bayesian personalized ranking loss
+- Custom splits based on date
+- Support for edge weights?
