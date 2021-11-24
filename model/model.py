@@ -18,27 +18,31 @@ class LightGCNStack(torch.nn.Module):
         self.latent_dim = latent_dim
         self.num_layers = args.num_layers
         self.dataset = dataset
-        self.embeddings = torch.nn.Embedding(
-            num_embeddings= dataset.num_nodes, embedding_dim=self.latent_dim)
-        print('ok')
+        self.embeddings_users = torch.nn.Embedding(num_embeddings= dataset.num_users, embedding_dim=self.latent_dim)
+        self.embeddings_artists = torch.nn.Embedding(num_embeddings= dataset.num_artists, embedding_dim=self.latent_dim)
 
     def reset_parameters(self):
         self.embeddings.reset_parameters()
 
     def forward(self):
-        x, edge_index, batch = self.embeddings.weight, self.dataset.train_pos_edge_index, self.dataset.batch
+        x_users, x_artists, batch = self.embeddings_users.weight, self.embeddings_artists.weight, \
+                                                self.dataset.batch
 
-        final_embeddings = torch.zeros(size=x.size(), device='cuda')
-        final_embeddings = final_embeddings + x/(self.num_layers+1)
+        final_embeddings_users = torch.zeros(size=x_users.size(), device='cuda')
+        final_embeddings_artists = torch.zeros(size=x_artists.size(), device='cuda')
+        final_embeddings_users = final_embeddings_users + x_users/(self.num_layers + 1)
+        final_embeddings_artists = final_embeddings_artists + x_artists/(self.num_layers+1)
         for i in range(self.num_layers):
-            x = self.convs[i](x, edge_index)
-            final_embeddings = final_embeddings + x/(self.num_layers+1)
+            x_users = self.convs[i]((x_artists, x_users), self.dataset.edge_index_a2u, size=(self.dataset.num_artists, self.dataset.num_users))
+            x_artists = self.convs[i]((x_users, x_artists), self.dataset.edge_index_u2a, size=(self.dataset.num_users, self.dataset.num_artists))
+            final_embeddings_users = final_embeddings_users + x_users/(self.num_layers+1)
+            final_embeddings_artists = final_embeddings_artists + x_artists/(self.num_layers + 1)
 
-        return final_embeddings
+        return final_embeddings_users, final_embeddings_artists
 
-    def decode(self, z, pos_edge_index, neg_edge_index):  # only pos and neg edges
+    def decode(self, z1, z2, pos_edge_index, neg_edge_index):  # only pos and neg edges
         edge_index = torch.cat([pos_edge_index, neg_edge_index], dim=-1)  # concatenate pos and neg edges
-        logits = (z[edge_index[0]] * z[edge_index[1]]).sum(dim=-1)  # dot product
+        logits = (z1[edge_index[0]] * z2[edge_index[1]]).sum(dim=-1)  # dot product
         return logits
 
     def decode_all(self, z):
@@ -53,7 +57,7 @@ class LightGCN(MessagePassing):
         self.latent_dim = latent_dim
 
     def forward(self, x, edge_index, size=None):
-        return self.propagate(edge_index=edge_index, x=(x,x), size=size)
+        return self.propagate(edge_index=edge_index, x=(x[0], x[1]), size=size)
 
     def message(self, x_j):
         return x_j

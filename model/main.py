@@ -13,11 +13,11 @@ class objectview(object):
 if __name__=='__main__':
     best_val_perf = test_perf = 0
     data = get_pyg_data.load_feather()
-    data = train_test_split_edges(data)
+    #data = train_test_split_edges(data)
 
     for args in [
-        {'model_type': 'GraphSage', 'dataset': 'cora', 'num_layers': 2, 'heads': 1, 'batch_size': 32, 'hidden_dim': 32,
-         'dropout': 0.5, 'epochs': 500, 'opt': 'adam', 'opt_scheduler': 'none', 'opt_restart': 0, 'weight_decay': 5e-3,
+        {'model_type': 'LightGCN', 'num_layers': 3, 'batch_size': 32, 'hidden_dim': 64,
+         'dropout': 0, 'epochs': 1000, 'opt': 'adam', 'opt_scheduler': 'none', 'opt_restart': 0, 'weight_decay': 5e-3,
          'lr': 0.01},
     ]:
         args = objectview(args)
@@ -25,7 +25,7 @@ if __name__=='__main__':
         optimizer = torch.optim.Adam(params=model.parameters(), lr=0.001)
         for epoch in range(1, 1001):
             train_loss = train(model, data, optimizer)
-            val_perf, tmp_test_perf = test(model, data)
+            val_perf, tmp_test_perf = test(model, (data, data))
             if val_perf > best_val_perf:
                 best_val_perf = val_perf
                 test_perf = tmp_test_perf
