@@ -5,6 +5,7 @@ import torch.nn.functional as F
 import torch_scatter
 from torch_geometric.nn.conv import MessagePassing
 
+
 class LightGCNStack(torch.nn.Module):
     def __init__(self, latent_dim, dataset, args):
         super(LightGCNStack, self).__init__()
@@ -45,11 +46,20 @@ class LightGCNStack(torch.nn.Module):
         logits = (z1[edge_index[0]] * z2[edge_index[1]]).sum(dim=-1)  # dot product
         return logits
 
-    def decode_all(self, z):
-        prob_adj = z @ z.t()  # get adj NxN
+    def decode_all(self, z_users, z_artists):
+        prob_adj = z_users @ z_artists.t()  # get adj NxN
         #return (prob_adj > 0).nonzero(as_tuple=False).t()  # get predicted edge_list
         return prob_adj
 
+    def BPRLoss(self, prob_adj, real_adj, edge_index):
+        loss = 0
+        pos_scores = prob_adj[edge_index.cpu().numpy()]
+        for pos_score, node_index in zip(pos_scores, edge_index[0]):
+            neg_scores = prob_adj[node_index, real_adj[node_index] == 0]
+            loss = loss - torch.sum(torch.log(torch.sigmoid(pos_score.repeat(neg_scores.size()[0]) - neg_scores))) / \
+                   neg_scores.size()[0]
+
+        return loss / edge_index.size()[1]
 
 class LightGCN(MessagePassing):
     def __init__(self, latent_dim, **kwargs):

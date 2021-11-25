@@ -3,7 +3,7 @@ from model import LightGCNStack
 import torch
 from train_test import train, test
 from torch_geometric.utils import train_test_split_edges
-
+import time
 
 class objectview(object):
     def __init__(self, *args, **kwargs):
@@ -18,17 +18,17 @@ if __name__=='__main__':
     for args in [
         {'model_type': 'LightGCN', 'num_layers': 3, 'batch_size': 32, 'hidden_dim': 64,
          'dropout': 0, 'epochs': 1000, 'opt': 'adam', 'opt_scheduler': 'none', 'opt_restart': 0, 'weight_decay': 5e-3,
-         'lr': 0.01},
+         'lr': 0.1},
     ]:
         args = objectview(args)
         model, data = LightGCNStack(latent_dim=64, dataset=data, args=args).to('cuda'), data.to('cuda')
         optimizer = torch.optim.Adam(params=model.parameters(), lr=0.001)
         for epoch in range(1, 1001):
+            start = time.time()
             train_loss = train(model, data, optimizer)
             val_perf, tmp_test_perf = test(model, (data, data))
             if val_perf > best_val_perf:
                 best_val_perf = val_perf
                 test_perf = tmp_test_perf
-            log = 'Epoch: {:03d}, Loss: {:.4f}, Val: {:.4f}, Test: {:.4f}'
-            if epoch % 100 == 0:
-                print(log.format(epoch, train_loss, best_val_perf, test_perf))
+            log = 'Epoch: {:03d}, Loss: {:.4f}, Val: {:.4f}, Test: {:.4f}, Elapsed time: {:.2f}'
+            print(log.format(epoch, train_loss, best_val_perf, test_perf, time.time()-start))
