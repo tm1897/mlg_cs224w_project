@@ -2,6 +2,15 @@ import torch
 from torch_geometric.utils import negative_sampling
 import torch.nn.functional as F
 from sklearn.metrics import roc_auc_score
+import scipy
+import numpy
+
+def to_scipy_sparse_matrix(edge_index, num_nodes):
+    row, col = edge_index.cpu()
+    edge_attr = torch.ones(row.size(0))
+    out = scipy.sparse.coo_matrix(
+        (edge_attr.numpy(), (row.numpy(), col.numpy())), (num_nodes[0], num_nodes[1]))
+    return out
 
 
 def get_link_labels(pos_edge_index, neg_edge_index):
@@ -30,15 +39,19 @@ def train(model, data, optimizer):
     optimizer.zero_grad()
 
     z_users, z_artists = model.forward()  # encode
-    link_logits_u2a = model.decode(z1=z_users, z2=z_artists, pos_edge_index=data.edge_index_u2a,
-                                   neg_edge_index=data.neg_edge_index_u2a)  # decode
-    link_logits_a2u = model.decode(z1=z_artists, z2=z_users, pos_edge_index=data.edge_index_a2u,
-                                   neg_edge_index=data.neg_edge_index_a2u)  # decode
+    loss = model.BPRLoss(model.decode_all(z_users, z_artists),
+                         to_scipy_sparse_matrix(data.edge_index_u2a, num_nodes=(data.num_users, data.num_artists)).toarray(),
+                         data.edge_index_u2a)
+    #link_logits_u2a = model.decode(z1=z_users, z2=z_artists, pos_edge_index=data.edge_index_u2a,
+                                   #neg_edge_index=data.neg_edge_index_u2a)  # decode
+    #link_logits_a2u = model.decode(z1=z_artists, z2=z_users, pos_edge_index=data.edge_index_a2u,
+                                   #neg_edge_index=data.neg_edge_index_a2u)  # decode
 
-    link_labels_u2a = get_link_labels(data.edge_index_u2a, data.neg_edge_index_u2a)
-    link_labels_a2u = get_link_labels(data.edge_index_a2u, data.neg_edge_index_u2a)
-    loss = F.binary_cross_entropy_with_logits(link_logits_u2a, link_labels_u2a) + \
-           F.binary_cross_entropy_with_logits(link_logits_a2u, link_labels_a2u)
+    #link_labels_u2a = get_link_labels(data.edge_index_u2a, data.neg_edge_index_u2a)
+    #link_labels_a2u = get_link_labels(data.edge_index_a2u, data.neg_edge_index_u2a)
+
+    #loss = F.binary_cross_entropy_with_logits(link_logits_u2a, link_labels_u2a) + \
+           #F.binary_cross_entropy_with_logits(link_logits_a2u, link_labels_a2u)
 
     loss.backward()
     optimizer.step()
@@ -62,7 +75,7 @@ def test(model, data_val_test):
         link_labels_u2a = get_link_labels(data.edge_index_u2a, data.neg_edge_index_u2a)
         link_labels_a2u = get_link_labels(data.edge_index_a2u, data.neg_edge_index_a2u)# get link
 
-        perfs.append(roc_auc_score(link_labels_u2a.cpu(), link_probs_u2a.cpu())
-                                   + roc_auc_score(link_labels_a2u.cpu(), link_probs_a2u.cpu())/2)  # compute roc_auc score
+        perfs.append((roc_auc_score(link_labels_u2a.cpu(), link_probs_u2a.cpu())
+                                   +roc_auc_score(link_labels_a2u.cpu(), link_probs_a2u.cpu()))/2)  # compute roc_auc score
     return perfs
 
