@@ -2,8 +2,10 @@ import pandas as pd
 from torch_geometric.data import Data
 import torch
 
-def load_feather():
-    df_data = pd.read_feather('../data/user_tag_artist.feather')
+
+def load_data(df_data=None):
+    if df_data is None:
+        df_data = pd.read_feather('../data/user_tag_artist.feather')
     user_node_ids = 0
     user_node_id_dict = dict()
     artist_node_ids = 0

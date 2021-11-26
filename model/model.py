@@ -7,7 +7,7 @@ from torch_geometric.nn.conv import MessagePassing
 
 
 class LightGCNStack(torch.nn.Module):
-    def __init__(self, latent_dim, dataset, args):
+    def __init__(self, latent_dim, args):
         super(LightGCNStack, self).__init__()
         conv_model = LightGCN
         self.convs = nn.ModuleList()
@@ -24,6 +24,11 @@ class LightGCNStack(torch.nn.Module):
 
     def reset_parameters(self):
         self.embeddings.reset_parameters()
+
+    def init_data(self, dataset):
+        self.dataset = dataset
+        self.embeddings_users = torch.nn.Embedding(num_embeddings=dataset.num_users, embedding_dim=self.latent_dim).to('cuda')
+        self.embeddings_artists = torch.nn.Embedding(num_embeddings=dataset.num_artists, embedding_dim=self.latent_dim).to('cuda')
 
     def forward(self):
         x_users, x_artists, batch = self.embeddings_users.weight, self.embeddings_artists.weight, \
