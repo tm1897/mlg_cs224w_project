@@ -18,9 +18,9 @@ class LightGCNStack(torch.nn.Module):
 
         self.latent_dim = latent_dim
         self.num_layers = args.num_layers
-        self.dataset = dataset
-        self.embeddings_users = torch.nn.Embedding(num_embeddings= dataset.num_users, embedding_dim=self.latent_dim)
-        self.embeddings_artists = torch.nn.Embedding(num_embeddings= dataset.num_artists, embedding_dim=self.latent_dim)
+        self.dataset = None
+        self.embeddings_users = None
+        self.embeddings_artists = None
 
     def reset_parameters(self):
         self.embeddings.reset_parameters()
@@ -60,6 +60,12 @@ class LightGCNStack(torch.nn.Module):
                    neg_scores.size()[0]
 
         return loss / edge_index.size()[1]
+
+    def topN(self, user_id, n):
+        z_users, z_artists = self.forward()
+        scores = torch.squeeze(z_users[user_id] @ z_artists.t())
+        return torch.topk(scores, k=n)
+
 
 class LightGCN(MessagePassing):
     def __init__(self, latent_dim, **kwargs):
