@@ -1,4 +1,4 @@
 - Custom negative sampling technique for bipartite graph - DONE
 - Bayesian personalized ranking loss - DONE
-- Custom splits based on date
+- Custom splits based on date - DONE
 - Support for edge weights?
