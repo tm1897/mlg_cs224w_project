@@ -1,5 +1,4 @@
 import logging
-from collections import defaultdict
 
 import pandas as pd
 
@@ -8,47 +7,47 @@ from src.data_preprocessing import TrainTestGenerator
 logger = logging.getLogger(__name__)
 
 
-class HitRate:
-    def __init__(self, n=None, ignore_cold=False):
-        self.hits = defaultdict(int)
-        self.cases = 0
-        self.n = n if n is not None else [5, 10, 25, 50, 500]
-        self.ignore_cold = ignore_cold
+def rank_items(train, test, recommended):
+    train = train.copy()
+    test = test.copy()
+    recommended = recommended.copy()
 
-    def add_case(self, train, test, recommended):
-        # TODO Instead of computing HR directly, compute "normalized" rank and use it for HR, MRR, ...
-        train = train.copy()
-        test = test.copy()
-        recommended = recommended.copy()
+    # Remove train items from recommended
+    # Items seen in train will not be recommended to users
+    for item in train:
+        recommended.remove(item)
 
-        # Remove train items from recommended
-        # Items seen in train will not be recommended to users
-        for item in train:
+    ranks = []
+
+    # Iterate through all test items
+    for item in test:
+        try:
+            rank = recommended.index(item) + 1  # Indices start with 0, ranks with 1
+        except ValueError:
+            # Item was not seen in train set
+            rank = None
+        else:
             recommended.remove(item)
+        finally:
+            ranks.append(rank)
+    return ranks
 
-        # Iterate through all test items
-        for item in test:
-            for n in self.n:
-                # Increment hits[n] by one, if item is in the first n items
-                self.hits[n] += item in recommended[:n]
-            try:
-                # Remove item from recommended list
-                # Item will not be recommended to users again, if they already interacted with it
-                recommended.remove(item)
-            except ValueError:
-                # Item was not seen in train set
-                if self.ignore_cold:
-                    # If ignore cold, reduce total number of cases
-                    self.cases -= 1
-        self.cases += len(test)
 
-    def get_hit_rate(self, n: int):
-        if n not in self.n:
-            raise KeyError(f"{n} was not specified in constructor")
-        return self.hits[n] / self.cases
+def hit_rate_at_k(ranks, k):
+    ranks = pd.Series(ranks)
+    hits_at_k = ranks <= k
+    hits_at_k = hits_at_k.sum()
+    hit_rate = hits_at_k / len(ranks)
 
-    def __str__(self):
-        return "\n".join([f"{n}: {self.get_hit_rate(n)}" for n in self.n])
+    return hit_rate
+
+
+def mean_reciprocal_rank(ranks):
+    # TODO How to deal with nans - items not in train set
+    ranks = pd.Series(ranks)
+    mrr = (1 / ranks).mean()
+
+    return mrr
 
 
 class Evaluator:
@@ -56,32 +55,68 @@ class Evaluator:
         self.model_init = model_init
         self.train_test_generator = train_test_generator
 
-        self.hit_rate = {}
+        self.results = pd.DataFrame()
 
     def evaluate(self):
+        results = []
         for test_year, train, test in self.train_test_generator.forward_chaining():
             logging.info(f"Test year: {test_year}")
             model = self.model_init()
             model.fit(train)
-            hit_rate = HitRate()
             n_items = len(train["artistID"].unique())
 
             for user_id in test["userID"].unique():
                 user_train = list(train.loc[train["userID"] == user_id, "artistID"])
                 user_test = list(test[test["userID"] == user_id].sort_values("timestamp")["artistID"])
                 recommended = list(model.recommend(user_id, n_items))
+                ranks = rank_items(user_train, user_test, recommended)
+                results_user = pd.DataFrame({
+                    "user": user_id,
+                    "item": user_test,
+                    "rank": ranks,
+                    "test_year": test_year
+                })
+                results.append(results_user)
+        self.results = pd.concat(results).reset_index(drop=True)
 
-                hit_rate.add_case(user_train, user_test, recommended)
+    def get_hit_rates(self, Ks: list = None):
+        if Ks is None:
+            Ks = [5, 10, 25, 50, 500]
 
-            self.hit_rate[test_year] = hit_rate
+        results = self.results
+        results_df = []
+        years = sorted(results["test_year"].unique())
+        for year in years:
+            results_year = results[results["test_year"] == year]
+            cases = len(results_year)
+            row = [cases]
+            for k in Ks:
+                hr = hit_rate_at_k(results_year["rank"], k)
+                row.append(hr)
+            results_df.append(row)
+        results_df = pd.DataFrame(results_df, columns=["cases"] + Ks, index=years)
 
-    def get_results(self):
-        hit_rates = {}
+        return results_df
 
-        for year, hit_rate in self.hit_rate.items():
-            hit_rates[year] = [hit_rate.cases] + [hit / hit_rate.cases for hit in hit_rate.hits.values()]
+    def get_mrr(self):
+        results = self.results
+        results_df = []
+        years = sorted(results["test_year"].unique())
+        for year in years:
+            results_year = results[results["test_year"] == year]
+            ranks = results_year["rank"].dropna()
+            cases = len(ranks)
+            mrr = mean_reciprocal_rank(ranks)
+            row = [cases, mrr]
+            results_df.append(row)
+        results_df = pd.DataFrame(results_df, columns=["cases", "mrr"], index=years)
 
-        results = pd.DataFrame(hit_rates, index=["cases"] + hit_rate.n).T
-        results["cases"] = results["cases"].astype(int)
+        return results_df
 
-        return results
+    def save_results(self, file_path):
+        """
+
+        :param file_path: CSV file
+        :return:
+        """
+        self.results.to_csv(file_path, index=False)
