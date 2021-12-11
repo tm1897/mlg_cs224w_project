@@ -75,6 +75,13 @@ def mean_reciprocal_rank(ranks):
     return mrr
 
 
+def recall_at_k(ranks, k):
+    ranks = pd.Series(ranks)
+    recall = (ranks <= k).sum() / len(ranks)
+
+    return recall
+
+
 class Stopwatch:
     """
     Time is measured in seconds.
@@ -173,6 +180,25 @@ class Evaluator:
             row = [cases, mrr]
             results_df.append(row)
         results_df = pd.DataFrame(results_df, columns=["cases", "mrr"], index=years)
+
+        return results_df
+
+    def get_recalls(self, Ks: list = None):
+        if Ks is None:
+            Ks = [5, 10, 25, 50, 500]
+
+        results = self.results
+        results_df = []
+        years = sorted(results["test_year"].unique())
+        for year in years:
+            results_year = results[results["test_year"] == year]
+            cases = len(results_year)
+            row = [cases]
+            for k in Ks:
+                recall = recall_at_k(results_year["ranks"], k)
+                row.append(recall)
+            results_df.append(row)
+        results_df = pd.DataFrame(results_df, columns=["cases"] + Ks, index=years)
 
         return results_df
 
