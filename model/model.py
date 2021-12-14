@@ -1,34 +1,58 @@
 import torch
-
+from cmfrec import CMF_implicit
 import torch.nn as nn
 import torch.nn.functional as F
 import torch_scatter
 from torch_geometric.nn.conv import MessagePassing
+from scipy.sparse import coo_matrix
+
+def to_scipy_sparse_matrix(edge_index, num_nodes):
+    row, col = edge_index.cpu()
+    edge_attr = torch.ones(row.size(0))
+    out = coo_matrix(
+        (edge_attr.numpy(), (row.numpy(), col.numpy())), (num_nodes[0], num_nodes[1]))
+    return out
+
 
 
 class LightGCNStack(torch.nn.Module):
-    def __init__(self, latent_dim, args):
+    def __init__(self, args):
         super(LightGCNStack, self).__init__()
+        self.latent_dim = args.latent_dim
         conv_model = LightGCN
         self.convs = nn.ModuleList()
-        self.convs.append(conv_model(latent_dim))
+        self.convs.append(conv_model())
         assert (args.num_layers >= 1), 'Number of layers is not >=1'
         for l in range(args.num_layers-1):
-            self.convs.append(conv_model(latent_dim))
+            self.convs.append(conv_model())
 
-        self.latent_dim = latent_dim
         self.num_layers = args.num_layers
         self.dataset = None
         self.embeddings_users = None
         self.embeddings_artists = None
+        self.lambda_reg = args.lambda_reg
+        self.hot_start = args.hot_start
 
     def reset_parameters(self):
         self.embeddings.reset_parameters()
 
     def init_data(self, dataset):
         self.dataset = dataset
-        self.embeddings_users = torch.nn.Embedding(num_embeddings=dataset.num_users, embedding_dim=self.latent_dim).to('cuda')
-        self.embeddings_artists = torch.nn.Embedding(num_embeddings=dataset.num_artists, embedding_dim=self.latent_dim).to('cuda')
+        if self.hot_start:
+            model = CMF_implicit(
+                k=self.latent_dim,
+                nonneg=False,
+                random_state=1,
+                niter=100
+            )
+            model.fit(to_scipy_sparse_matrix(self.dataset.edge_index_u2a, num_nodes=(self.dataset.num_users, self.dataset.num_artists)))
+            self.embeddings_users = nn.Embedding.from_pretrained(torch.FloatTensor(model.A_), freeze=False).to('cuda')
+            self.embeddings_artists = nn.Embedding.from_pretrained(torch.FloatTensor(model.B_), freeze=False).to('cuda')
+        else:
+            self.embeddings_users = torch.nn.Embedding(num_embeddings=dataset.num_users,
+                                                       embedding_dim=self.latent_dim).to('cuda')
+            self.embeddings_artists = torch.nn.Embedding(num_embeddings=dataset.num_artists,
+                                                         embedding_dim=self.latent_dim).to('cuda')
 
     def forward(self):
         x_users, x_artists, batch = self.embeddings_users.weight, self.embeddings_artists.weight, \
@@ -64,7 +88,11 @@ class LightGCNStack(torch.nn.Module):
             loss = loss - torch.sum(torch.log(torch.sigmoid(pos_score.repeat(neg_scores.size()[0]) - neg_scores))) / \
                    neg_scores.size()[0]
 
-        return loss / edge_index.size()[1]
+        #loss += self.lambda_reg*(torch.pow(torch.norm(self.embeddings_users.weight, dim=None), 2) +
+                                 #torch.pow(torch.norm(self.embeddings_artists.weight), 2))
+
+        return loss
+
 
     def topN(self, user_id, n):
         z_users, z_artists = self.forward()
@@ -73,9 +101,9 @@ class LightGCNStack(torch.nn.Module):
 
 
 class LightGCN(MessagePassing):
-    def __init__(self, latent_dim, **kwargs):
+    def __init__(self, **kwargs):
         super(LightGCN, self).__init__(node_dim=0, **kwargs)
-        self.latent_dim = latent_dim
+
 
     def forward(self, x, edge_index, size=None):
         return self.propagate(edge_index=edge_index, x=(x[0], x[1]), size=size)

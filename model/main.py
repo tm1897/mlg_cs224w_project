@@ -23,7 +23,7 @@ class objectview(object):
 class LightGCN_recommender:
     def __init__(self, args):
         self.args = objectview(args)
-        self.model = LightGCNStack(latent_dim=64, args=self.args).to('cuda')
+        self.model = LightGCNStack(args=self.args).to('cuda')
         self.a_rev_dict = None
         self.u_rev_dict = None
         self.a_dict = None
@@ -70,8 +70,11 @@ def evaluate(args):
     evaluator = Evaluator(partial(LightGCN_recommender, args), data_generator)
     evaluator.evaluate()
 
-    results = evaluator.get_results()
-    results.to_csv("LightGCN_results.csv")
+    evaluator.save_results("../results/lightgcn.csv", '../results/lightgcn_time.csv')
+    print('Hit rate: ')
+    print(evaluator.get_hit_rates())
+    print('MMR: ')
+    print(evaluator.get_mrr())
 
 
 if __name__=='__main__':
@@ -79,9 +82,9 @@ if __name__=='__main__':
     # data = get_pyg_data.load_data()
     #data = train_test_split_edges(data)
 
-    args = {'model_type': 'LightGCN', 'num_layers': 3, 'batch_size': 32, 'hidden_dim': 64,
-         'dropout': 0, 'epochs': 1000, 'opt': 'adam', 'opt_scheduler': 'none', 'opt_restart': 0, 'weight_decay': 5e-3,
-         'lr': 0.1}
+    args = {'model_type': 'LightGCN', 'num_layers': 3, 'batch_size': 32, 'latent_dim': 32,
+         'dropout': 0, 'epochs': 1000, 'opt': 'adam', 'opt_scheduler': 'none', 'opt_restart': 0, 'weight_decay': 0,
+         'lr': 0.1, 'lambda_reg': 1e-4, 'hot_start': True}
 
     evaluate(args)
 

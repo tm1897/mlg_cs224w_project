@@ -41,7 +41,7 @@ def train(model, data, optimizer):
     z_users, z_artists = model.forward()  # encode
     loss = model.BPRLoss(model.decode_all(z_users, z_artists),
                          to_scipy_sparse_matrix(data.edge_index_u2a, num_nodes=(data.num_users, data.num_artists)).toarray(),
-                         data.edge_index_u2a)
+                        data.edge_index_u2a)
     #link_logits_u2a = model.decode(z1=z_users, z2=z_artists, pos_edge_index=data.edge_index_u2a,
                                    #neg_edge_index=data.neg_edge_index_u2a)  # decode
     #link_logits_a2u = model.decode(z1=z_artists, z2=z_users, pos_edge_index=data.edge_index_a2u,
