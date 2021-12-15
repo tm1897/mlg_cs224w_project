@@ -33,7 +33,7 @@ class TrainTestGenerator:
     def forward_chaining(self):
         data = self.prepare_data()
 
-        for test_year in range(2008, 2011+1):
+        for test_year in range(2008, 2010+1):
             train = data[data["timestamp"].dt.year < test_year]
             test = data[data["timestamp"].dt.year == test_year]
 
