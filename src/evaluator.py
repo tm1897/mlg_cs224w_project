@@ -100,6 +100,9 @@ class Stopwatch:
         df = pd.DataFrame(self.times.items(), columns=["tag", "time"])
         return df
 
+    def set_from_df(self, times_df):
+        self.times = times_df.set_index("tag")["time"].to_dict()
+
 
 class Evaluator:
     def __init__(self, model_init, train_test_generator: TrainTestGenerator):
@@ -230,3 +233,14 @@ class Evaluator:
             self.results.to_csv(ranks_path, index=False)
         if times_path is not None:
             self.get_raw_times().to_csv(times_path, index=False)
+
+    def load_results(self, ranks_path=None, times_path=None):
+        """
+
+        :param ranks_path: ranks in CSV file
+        :return:
+        """
+        if ranks_path is not None:
+            self.results = pd.read_csv(ranks_path)
+        if times_path is not None:
+            self.stopwatch.set_from_df(pd.read_csv(times_path))
