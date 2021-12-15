@@ -64,7 +64,7 @@ class LightGCNStack(torch.nn.Module):
             loss = loss - torch.sum(torch.log(torch.sigmoid(pos_score.repeat(neg_scores.size()[0]) - neg_scores))) / \
                    neg_scores.size()[0]
 
-        return loss / edge_index.size()[1]
+        return loss
 
     def topN(self, user_id, n):
         z_users, z_artists = self.forward()
