@@ -1,7 +1,7 @@
 from functools import partial
 
 import get_pyg_data
-from model import LightGCNStack
+from lightgcn_model import LightGCNStack
 import torch
 
 from src.data_preprocessing import TrainTestGenerator
