@@ -7,7 +7,7 @@ $ pip install numpy pandas networkx cmfrec torch torch-geometric torch-sparse to
 ```
 Link to the Google Colab: https://colab.research.google.com/drive/1YD5zz2QaAP-jbOzY4mjbG6_X9EcA93lW?usp=sharing
 
-Link to the Medium post: YET TO ADD
+Link to the Medium post: https://medium.com/@jn2279/better-recommender-systems-with-lightgcn-2d89d19f90b2
 
 The repository as structured as follows:
 
